@@ -1,47 +1,34 @@
-use dotenv::dotenv;
-use ethers::{
-    contract::abigen,
-    core::types::Address,
-    providers::{Middleware, Provider, StreamExt, Ws},
-    types::Filter,
-};
-use eyre::Result;
-use std::env;
-use std::sync::Arc;
+use alloy_primitives::{Address, U256};
+use alloy_sol_types::{sol, SolCall};
+use hex_literal::hex;
 
-abigen!(LendingVault, "LendingVault.json");
+fn main() {
+    println!("Hello, world!");
 
-const VAULT_ADDRESS: &str = "0xaF53431488E871D103baA0280b6360998F0F9926";
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    dotenv().ok();
-
-    let wss_url = env::var("WSS_URL").expect("Env: WSS_URL");
-
-    let provider = Provider::<Ws>::connect(wss_url).await?;
-    let client = Arc::new(provider);
-    let address: Address = VAULT_ADDRESS.parse()?;
-    let contract = LendingVault::new(address, client);
-
-    let deposit_logs = provider.get_logs(&dep_filter).await?;
-
-    listen_all_events(&contract).await?;
-
-    Ok(())
-}
-
-async fn listen_all_events(contract: &LendingVault<Provider<Ws>>) -> Result<()> {
-    let events = contract.events().from_block(17564663);
-    let mut stream = events.stream().await?.take(1);
-
-    while let Some(Ok(evt)) = stream.next().await {
-        match evt {
-            LendingVaultEvents::DepositFilter(f) => println!("{f:?}"),
-            LendingVaultEvents::WithdrawFilter(f) => println!("{f:?}"),
-            _ => println!("dont care."),
+    sol! {
+        #[derive(Debug, PartialEq)]
+        interface IERC20 {
+            function transfer(address to, uint256 amount) external returns (bool);
+            function approve(address spender, uint256 amount) external returns (bool);
         }
     }
 
-    Ok(())
+    // random mainnet ERC20 transfer
+    // https://etherscan.io/tx/0x947332ff624b5092fb92e8f02cdbb8a50314e861a4b39c29a286b3b75432165e
+    let data = hex!(
+        "a9059cbb"
+        "0000000000000000000000008bc47be1e3abbaba182069c89d08a61fa6c2b292"
+        "0000000000000000000000000000000000000000000000000000000253c51700"
+    );
+    let expected = IERC20::transferCall {
+        to: Address::from(hex!("8bc47be1e3abbaba182069c89d08a61fa6c2b292")),
+        amount: U256::from(9995360000_u64),
+    };
+
+    assert_eq!(data[..4], IERC20::transferCall::SELECTOR);
+    let decoded = IERC20::IERC20Calls::decode(&data, true).unwrap();
+    assert_eq!(decoded, IERC20::IERC20Calls::transfer(expected));
+    assert_eq!(decoded.encode(), data);
+
+    println!("decoded transfer call result: {:?}", decoded);
 }
