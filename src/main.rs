@@ -2,7 +2,8 @@ use dotenv::dotenv;
 use ethers::{
     contract::abigen,
     core::types::Address,
-    providers::{Provider, StreamExt, Ws},
+    providers::{Middleware, Provider, StreamExt, Ws},
+    types::Filter,
 };
 use eyre::Result;
 use std::env;
@@ -22,6 +23,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = Arc::new(provider);
     let address: Address = VAULT_ADDRESS.parse()?;
     let contract = LendingVault::new(address, client);
+
+    let deposit_logs = provider.get_logs(&dep_filter).await?;
 
     listen_all_events(&contract).await?;
 
